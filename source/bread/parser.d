@@ -732,9 +732,22 @@ final class Parser {
 			}
 			return result;
 		}
-		else {
-			return readDecl;
+
+		Lexer saved = lexer.save();
+
+		try {
+			Expr expr = readExpr;
+			if (CallExpr call = cast(CallExpr) expr) {
+				ExprStat stat = new ExprStat;
+				stat.value = expr;
+				stat.span = merge(call.span, semi);
+				return stat;
+			}
 		}
+		catch (ParsingException) {}
+
+		lexer = saved;
+		return readDecl;
 	}
 
 	Expr readAtom() {

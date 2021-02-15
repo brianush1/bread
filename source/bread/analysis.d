@@ -308,7 +308,7 @@ final class TemplateType : Type {
 					Type typeType = funcInner.check(decl.type, true);
 					if (!TypeType.instance.accepts(typeType)) {
 						addStack(decl.type.span);
-						throw new AnalysisException("expected type, not '"
+						throw new AnalysisException("expected type, not value of type '"
 							~ typeType.toString ~ "'");
 					}
 					Type type = funcInner.eval(decl.type).payload.expect!Type;
@@ -329,6 +329,9 @@ final class TemplateType : Type {
 				else {
 					assert(0); // TODO: this
 				}
+			}
+			else if (ExprStat exprStat = cast(ExprStat) stat) {
+				funcInner.check(exprStat.value, true);
 			}
 		}
 		if (realReturnType is null) {
@@ -495,6 +498,9 @@ final class Environment {
 				}
 				return TypeType.instance;
 			}
+			else if (expr.value == "print") {
+				return new FunctionType(VoidType.instance, [IntType.instance]);
+			}
 			else {
 				throw new AnalysisException("unknown built-in '" ~ expr.value ~ "'");
 			}
@@ -604,7 +610,7 @@ final class Environment {
 						Type typeType = funcInner.check(decl.type, true);
 						if (!TypeType.instance.accepts(typeType)) {
 							addStack(decl.type.span);
-							throw new AnalysisException("expected type, not '"
+							throw new AnalysisException("expected type, not value of type '"
 								~ typeType.toString ~ "'");
 						}
 						Type type = funcInner.eval(decl.type).payload.expect!Type;
@@ -625,6 +631,9 @@ final class Environment {
 					else {
 						assert(0); // TODO: this
 					}
+				}
+				else if (ExprStat exprStat = cast(ExprStat) stat) {
+					funcInner.check(exprStat.value, false);
 				}
 			}
 			if (realReturnType is null) {
@@ -685,6 +694,15 @@ final class Environment {
 			}
 			else if (expr.value == "void-type") {
 				return Value(cast(Type) VoidType.instance);
+			}
+			else if (expr.value == "print") {
+				return Value(cast(Value.Function)(Value[] args) {
+					import std.stdio : writeln;
+
+					writeln(args[0].payload.expect!int);
+
+					return Value(null);
+				});
 			}
 			else {
 				throw new AnalysisException("unknown built-in '" ~ expr.value ~ "'");
@@ -747,6 +765,9 @@ final class Environment {
 					else if (Return returnStat = cast(Return) stat) {
 						return funcInner.eval(returnStat.value);
 					}
+					else if (ExprStat exprStat = cast(ExprStat) stat) {
+						funcInner.eval(exprStat.value);
+					}
 				}
 				return Value(null);
 			});
@@ -786,6 +807,9 @@ final class Environment {
 					}
 					else if (Return returnStat = cast(Return) stat) {
 						return funcInner.eval(returnStat.value);
+					}
+					else if (ExprStat exprStat = cast(ExprStat) stat) {
+						funcInner.eval(exprStat.value);
 					}
 				}
 				return Value(null);

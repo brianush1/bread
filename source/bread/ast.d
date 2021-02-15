@@ -84,6 +84,12 @@ abstract class Stat : BaseNode {
 	mixin prettyPrinter!(typeof(this));
 }
 
+final class ExprStat : Stat {
+	Expr value;
+
+	mixin prettyPrinter!(typeof(this));
+}
+
 final class Return : Stat {
 	Expr value;
 
