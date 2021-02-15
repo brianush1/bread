@@ -1,0 +1,3 @@
+#!/bin/sh
+
+dmd -i -I=source -of=bread source/bread/app.d

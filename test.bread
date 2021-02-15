@@ -1,0 +1,16 @@
+type int = __builtin_value__ "int-type";
+type void = __builtin_value__ "void-type";
+
+// 'static' in Bread means the same as 'enum' in D basically
+// everything in the global scope is automatically marked 'static'
+
+int main() {
+	template mul2!(type T) {
+		T result(T value) {
+			return value + value;
+		}
+		return result;
+	}
+
+	return mul2!int(2);
+}
