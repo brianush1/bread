@@ -537,17 +537,44 @@ static this() {
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
 
-			CallExpr result = new CallExpr;
-			result.func = lhs;
+			Lexer saved = parser.lexer.save();
+
+			try {
+				FuncExpr result = new FuncExpr;
+				result.returnType = lhs;
+				while (parser.lexer.until!(Token.Symbol)(Symbol!")")) {
+					Expr paramType = parser.readExpr;
+					string paramName = parser.lexer.expect!(Token.Identifier).name;
+					result.params ~= FuncExpr.Param(paramType, paramName);
+					if (!parser.lexer.tryNext!(Token.Symbol)(Symbol!",")) {
+						break;
+					}
+				}
+				parser.lexer.expect!(Token.Symbol)(Symbol!")");
+				auto startCurly = parser.lexer.expect!(Token.Symbol)(Symbol!"{");
+				while (parser.lexer.until!(Token.Symbol)(Symbol!"}")) {
+					result.body ~= parser.readStat;
+				}
+				parser.lexer.expect!(Token.Symbol)(Symbol!"}");
+
+				result.span = merge(lhs.span, startCurly.span);
+				return cast(Expr) result;
+			}
+			catch (ParsingException e) {}
+
+			parser.lexer = saved;
+
+			CallExpr callResult = new CallExpr;
+			callResult.func = lhs;
 			while (parser.lexer.until!(Token.Symbol)(Symbol!")")) {
-				result.args ~= parser.readExpr;
+				callResult.args ~= parser.readExpr;
 				if (!parser.lexer.tryNext!(Token.Symbol)(Symbol!",")) {
 					break;
 				}
 			}
 			parser.lexer.expect!(Token.Symbol)(Symbol!")");
-			result.span = merge(lhs.span, parser.lexer.last.span);
-			return result;
+			callResult.span = merge(lhs.span, parser.lexer.last.span);
+			return cast(Expr) callResult;
 		},
 	);
 	parselets ~= InfixParselet(
