@@ -506,9 +506,10 @@ static this() {
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"+"); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
-			Expr rhs = parser.readExpr;
+			Expr rhs = parser.readExpr(1);
 
-			AddExpr result = new AddExpr;
+			BinaryExpr result = new BinaryExpr;
+			result.op = BinaryOp.Add;
 			result.lhs = lhs;
 			result.rhs = rhs;
 			result.span = merge(lhs.span, rhs.span);
@@ -516,7 +517,22 @@ static this() {
 		},
 	);
 	parselets ~= InfixParselet(
-		1,
+		2,
+		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"*"); },
+		(Parser parser, Expr lhs) {
+			parser.lexer.popFront;
+			Expr rhs = parser.readExpr(2);
+
+			BinaryExpr result = new BinaryExpr;
+			result.op = BinaryOp.Mul;
+			result.lhs = lhs;
+			result.rhs = rhs;
+			result.span = merge(lhs.span, rhs.span);
+			return result;
+		},
+	);
+	parselets ~= InfixParselet(
+		3,
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"("); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
@@ -535,7 +551,7 @@ static this() {
 		},
 	);
 	parselets ~= InfixParselet(
-		1,
+		100,
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"!"); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
@@ -552,7 +568,7 @@ static this() {
 				parser.lexer.expect!(Token.Symbol)(Symbol!")");
 			}
 			else {
-				result.args ~= parser.readAtom;
+				result.args ~= parser.readExpr(99);
 			}
 			result.span = merge(lhs.span, parser.lexer.last.span);
 			return result;
@@ -766,6 +782,12 @@ final class Parser {
 			result.value = cast(int) token.value;
 			return result;
 		}
+		else if (lexer.tryNext!(Token.Symbol)(Symbol!"(")) {
+			Expr result = readExpr;
+			lexer.expect!(Token.Symbol)(Symbol!")");
+			result.span = merge(start, lexer.last.span);
+			return result;
+		}
 		else if (lexer.tryNext!(Token.Keyword)(Keyword!"__builtin_value__")) {
 			string value = lexer.expect!(Token.String).value;
 			BuiltinValue result = new BuiltinValue;
@@ -825,11 +847,11 @@ final class Parser {
 		}
 	}
 
-	Expr readExpr() {
+	Expr readExpr(int precedence = 0) {
 		Expr lhs = readAtom;
 		outer: while (true) {
 			foreach (parselet; parselets) {
-				if (parselet.isOperator(this)) {
+				if (parselet.precedence > precedence && parselet.isOperator(this)) {
 					lhs = parselet.func(this, lhs);
 					continue outer;
 				}

@@ -47,6 +47,15 @@ struct Value {
 					assert(0);
 				},
 			);
+		case Operation.Mul:
+			return payload.match!(
+				(int value) {
+					return Value(value * args[0].payload.expect!int);
+				},
+				delegate Value(_) {
+					assert(0);
+				},
+			);
 		case Operation.Call:
 			return payload.match!(
 				(Function value) {
@@ -71,6 +80,7 @@ struct Value {
 
 enum Operation {
 	Add,
+	Mul,
 	Call,
 	TemplateCall,
 }
@@ -92,7 +102,7 @@ abstract class Type {
 	*/
 	abstract bool isRuntimeType();
 
-	Type typeAdd(Type arg) {
+	Type typeBinary(BinaryOp op, Type arg) {
 		return null;
 	}
 
@@ -162,8 +172,11 @@ final class IntType : Type {
 		return true;
 	}
 
-	override Type typeAdd(Type arg) {
-		if (arg is instance) {
+	override Type typeBinary(BinaryOp op, Type arg) {
+		if (arg is instance && [
+			BinaryOp.Add,
+			BinaryOp.Mul,
+		].canFind(op)) {
 			return instance;
 		}
 
@@ -517,12 +530,13 @@ final class Environment {
 		else if (NilLiteral expr = cast(NilLiteral) expr_) {
 			return VoidType.instance;
 		}
-		else if (AddExpr expr = cast(AddExpr) expr_) {
+		else if (BinaryExpr expr = cast(BinaryExpr) expr_) {
 			Type lhsType = check(expr.lhs, staticEval);
 			Type rhsType = check(expr.rhs, staticEval);
-			Type result = lhsType.typeAdd(rhsType);
+			Type result = lhsType.typeBinary(expr.op, rhsType);
 			if (result is null) {
-				throw new AnalysisException("operator '+' cannot be applied to types '"
+				throw new AnalysisException("operation '" ~ expr.op.to!string
+					~ "' cannot be applied to types '"
 					~ lhsType.toString ~ "' and '" ~ rhsType.toString ~ "'");
 			}
 			return result;
@@ -717,8 +731,13 @@ final class Environment {
 		else if (NilLiteral expr = cast(NilLiteral) expr_) {
 			return Value(null);
 		}
-		else if (AddExpr expr = cast(AddExpr) expr_) {
-			return eval(expr.lhs).operate(Operation.Add, [eval(expr.rhs)]);
+		else if (BinaryExpr expr = cast(BinaryExpr) expr_) {
+			Operation op;
+			final switch (expr.op) {
+			case BinaryOp.Add: op = Operation.Add; break;
+			case BinaryOp.Mul: op = Operation.Mul; break;
+			}
+			return eval(expr.lhs).operate(op, [eval(expr.rhs)]);
 		}
 		else if (CallExpr expr = cast(CallExpr) expr_) {
 			return eval(expr.func).operate(Operation.Call, expr.args.map!(x => eval(x)).array);

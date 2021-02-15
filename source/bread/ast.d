@@ -140,7 +140,13 @@ final class TemplateExpr : Expr {
 	mixin prettyPrinter!(typeof(this));
 }
 
-final class AddExpr : Expr {
+enum BinaryOp {
+	Add,
+	Mul,
+}
+
+final class BinaryExpr : Expr {
+	BinaryOp op;
 	Expr lhs;
 	Expr rhs;
 
