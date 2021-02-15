@@ -241,7 +241,7 @@ final class FunctionType : Type {
 	}
 
 	override Type typeCall(Type[] args) {
-		if (args.length < paramTypes.length)
+		if (args.length != paramTypes.length)
 			return null;
 
 		foreach (i; 0 .. paramTypes.length) {
@@ -286,7 +286,7 @@ final class TemplateType : Type {
 	}
 
 	override Type typeTemplateCall(Type[] argTypes, Value[] args) {
-		if (argTypes.length < paramTypes.length)
+		if (argTypes.length != paramTypes.length)
 			return null;
 
 		foreach (i; 0 .. paramTypes.length) {
