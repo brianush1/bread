@@ -37,50 +37,65 @@ struct Value {
 	}
 
 	Value operate(Operation op, Value[] args) {
-		final switch (op) {
-		case Operation.Add:
-			return payload.match!(
-				(int value) {
-					return Value(value + args[0].payload.expect!int);
-				},
-				delegate Value(_) {
+		return payload.match!(
+			(int value) {
+				enum OpHandler(Operation op, string opStr) = "
+					case "~op.stringof~":
+						return Value(value"~opStr~"args[0].payload.expect!int);
+				";
+				switch (op) {
+					// arithmetic
+					mixin(OpHandler!(Operation.Add, "+"));
+					mixin(OpHandler!(Operation.Sub, "-"));
+					mixin(OpHandler!(Operation.Mul, "*"));
+					mixin(OpHandler!(Operation.Div, "/"));
+					mixin(OpHandler!(Operation.Mod, "%"));
+
+					// relational
+					mixin(OpHandler!(Operation.Eq, "=="));
+					mixin(OpHandler!(Operation.Neq, "!="));
+					mixin(OpHandler!(Operation.Lt, "<"));
+					mixin(OpHandler!(Operation.Gt, ">"));
+					mixin(OpHandler!(Operation.Le, "<="));
+					mixin(OpHandler!(Operation.Ge, ">="));
+				default:
 					assert(0);
-				},
-			);
-		case Operation.Mul:
-			return payload.match!(
-				(int value) {
-					return Value(value * args[0].payload.expect!int);
-				},
-				delegate Value(_) {
-					assert(0);
-				},
-			);
-		case Operation.Call:
-			return payload.match!(
-				(Function value) {
+				}
+			},
+			(Function value) {
+				switch (op) {
+				case Operation.Call:
+				case Operation.TemplateCall:
 					return value(args);
-				},
-				delegate Value(_) {
+				default:
 					assert(0);
-				},
-			);
-		case Operation.TemplateCall:
-			return payload.match!(
-				(Function value) {
-					return value(args);
-				},
-				delegate Value(_) {
-					assert(0);
-				},
-			);
-		}
+				}
+				return value(args);
+			},
+			delegate Value(_) {
+				assert(0);
+			},
+		);
 	}
 }
 
 enum Operation {
+	// arithmetic
 	Add,
+	Sub,
 	Mul,
+	Div,
+	Mod,
+
+	// relational
+	Eq,
+	Neq,
+	Lt,
+	Gt,
+	Le,
+	Ge,
+
+	// misc
 	Call,
 	TemplateCall,
 }
@@ -175,9 +190,23 @@ final class IntType : Type {
 	override Type typeBinary(BinaryOp op, Type arg) {
 		if (arg is instance && [
 			BinaryOp.Add,
+			BinaryOp.Sub,
 			BinaryOp.Mul,
+			BinaryOp.Div,
+			BinaryOp.Mod,
 		].canFind(op)) {
 			return instance;
+		}
+
+		if (arg is instance && [
+			BinaryOp.Eq,
+			BinaryOp.Neq,
+			BinaryOp.Lt,
+			BinaryOp.Gt,
+			BinaryOp.Le,
+			BinaryOp.Ge,
+		].canFind(op)) {
+			return BoolType.instance;
 		}
 
 		return null;
@@ -794,10 +823,18 @@ final class Environment {
 			return Value(null);
 		}
 		else if (BinaryExpr expr = cast(BinaryExpr) expr_) {
+			import std.traits : EnumMembers;
+
 			Operation op;
-			final switch (expr.op) {
-			case BinaryOp.Add: op = Operation.Add; break;
-			case BinaryOp.Mul: op = Operation.Mul; break;
+			outer: final switch (expr.op) {
+				static foreach (i, field; EnumMembers!BinaryOp) {
+					case field:
+						op = __traits(getMember,
+							Operation,
+							__traits(identifier, EnumMembers!BinaryOp[i])
+						);
+						break outer;
+				}
 			}
 			return eval(expr.lhs).operate(op, [eval(expr.rhs)]);
 		}

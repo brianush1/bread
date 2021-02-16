@@ -14,6 +14,7 @@ immutable(string[]) SYMBOLS = [
 	"!", ".", ",", ":", ";",
 	"..", "/", "=",
 	"+", "-", "*", "**",
+	"%", "==", "!=", "<", ">", "<=", ">=",
 ].sort!((a, b) => b.count < a.count).array;
 
 struct SymbolId {
@@ -500,39 +501,42 @@ struct InfixParselet {
 
 private InfixParselet[] parselets;
 
+private void addBinaryOp(int precedence, string sym, BinaryOp op)() {
+	parselets ~= InfixParselet(
+		precedence,
+		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!sym); },
+		(Parser parser, Expr lhs) {
+			parser.lexer.popFront;
+			Expr rhs = parser.readExpr(precedence);
+
+			BinaryExpr result = new BinaryExpr;
+			result.op = op;
+			result.lhs = lhs;
+			result.rhs = rhs;
+			result.span = merge(lhs.span, rhs.span);
+			return result;
+		},
+	);
+}
+
 static this() {
-	parselets ~= InfixParselet(
-		1,
-		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"+"); },
-		(Parser parser, Expr lhs) {
-			parser.lexer.popFront;
-			Expr rhs = parser.readExpr(1);
+	// arithmetic
+	addBinaryOp!(2, "+", BinaryOp.Add);
+	addBinaryOp!(2, "-", BinaryOp.Sub);
+	addBinaryOp!(3, "*", BinaryOp.Mul);
+	addBinaryOp!(3, "/", BinaryOp.Div);
+	addBinaryOp!(3, "%", BinaryOp.Mod);
 
-			BinaryExpr result = new BinaryExpr;
-			result.op = BinaryOp.Add;
-			result.lhs = lhs;
-			result.rhs = rhs;
-			result.span = merge(lhs.span, rhs.span);
-			return result;
-		},
-	);
-	parselets ~= InfixParselet(
-		2,
-		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"*"); },
-		(Parser parser, Expr lhs) {
-			parser.lexer.popFront;
-			Expr rhs = parser.readExpr(2);
+	// relational
+	addBinaryOp!(1, "==", BinaryOp.Eq);
+	addBinaryOp!(1, "!=", BinaryOp.Neq);
+	addBinaryOp!(1, "<", BinaryOp.Lt);
+	addBinaryOp!(1, ">", BinaryOp.Gt);
+	addBinaryOp!(1, "<=", BinaryOp.Le);
+	addBinaryOp!(1, ">=", BinaryOp.Ge);
 
-			BinaryExpr result = new BinaryExpr;
-			result.op = BinaryOp.Mul;
-			result.lhs = lhs;
-			result.rhs = rhs;
-			result.span = merge(lhs.span, rhs.span);
-			return result;
-		},
-	);
 	parselets ~= InfixParselet(
-		3,
+		4,
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"("); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
@@ -578,7 +582,7 @@ static this() {
 		},
 	);
 	parselets ~= InfixParselet(
-		100,
+		5,
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"!"); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
@@ -595,7 +599,7 @@ static this() {
 				parser.lexer.expect!(Token.Symbol)(Symbol!")");
 			}
 			else {
-				result.args ~= parser.readExpr(99);
+				result.args ~= parser.readExpr(4);
 			}
 			result.span = merge(lhs.span, parser.lexer.last.span);
 			return result;
