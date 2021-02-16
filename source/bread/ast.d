@@ -166,23 +166,23 @@ final class TemplateExpr : Expr {
 
 enum BinaryOp {
 	// arithmetic
-	Add,
-	Sub,
-	Mul,
-	Div,
-	Mod,
+	Add = 0,
+	Sub = 1,
+	Mul = 2,
+	Div = 3,
+	Mod = 4,
 
 	// relational
-	Eq,
-	Neq,
-	Lt,
-	Gt,
-	Le,
-	Ge,
+	Eq = 5,
+	Neq = 6,
+	Lt = 7,
+	Gt = 8,
+	Le = 9,
+	Ge = 10,
 
 	// boolean
-	And,
-	Or,
+	And = 11,
+	Or = 12,
 }
 
 final class BinaryExpr : Expr {
