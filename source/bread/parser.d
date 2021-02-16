@@ -15,6 +15,7 @@ immutable(string[]) SYMBOLS = [
 	"..", "/", "=",
 	"+", "-", "*", "**",
 	"%", "==", "!=", "<", ">", "<=", ">=",
+	"&&", "||",
 ].sort!((a, b) => b.count < a.count).array;
 
 struct SymbolId {
@@ -521,22 +522,26 @@ private void addBinaryOp(int precedence, string sym, BinaryOp op)() {
 
 static this() {
 	// arithmetic
-	addBinaryOp!(2, "+", BinaryOp.Add);
-	addBinaryOp!(2, "-", BinaryOp.Sub);
-	addBinaryOp!(3, "*", BinaryOp.Mul);
-	addBinaryOp!(3, "/", BinaryOp.Div);
-	addBinaryOp!(3, "%", BinaryOp.Mod);
+	addBinaryOp!(20, "+", BinaryOp.Add);
+	addBinaryOp!(20, "-", BinaryOp.Sub);
+	addBinaryOp!(30, "*", BinaryOp.Mul);
+	addBinaryOp!(30, "/", BinaryOp.Div);
+	addBinaryOp!(30, "%", BinaryOp.Mod);
 
 	// relational
-	addBinaryOp!(1, "==", BinaryOp.Eq);
-	addBinaryOp!(1, "!=", BinaryOp.Neq);
-	addBinaryOp!(1, "<", BinaryOp.Lt);
-	addBinaryOp!(1, ">", BinaryOp.Gt);
-	addBinaryOp!(1, "<=", BinaryOp.Le);
-	addBinaryOp!(1, ">=", BinaryOp.Ge);
+	addBinaryOp!(10, "==", BinaryOp.Eq);
+	addBinaryOp!(10, "!=", BinaryOp.Neq);
+	addBinaryOp!(10, "<", BinaryOp.Lt);
+	addBinaryOp!(10, ">", BinaryOp.Gt);
+	addBinaryOp!(10, "<=", BinaryOp.Le);
+	addBinaryOp!(10, ">=", BinaryOp.Ge);
+
+	// boolean
+	addBinaryOp!(9, "&&", BinaryOp.And);
+	addBinaryOp!(8, "||", BinaryOp.Or);
 
 	parselets ~= InfixParselet(
-		4,
+		40,
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"("); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
@@ -582,7 +587,7 @@ static this() {
 		},
 	);
 	parselets ~= InfixParselet(
-		5,
+		50,
 		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"!"); },
 		(Parser parser, Expr lhs) {
 			parser.lexer.popFront;
@@ -599,7 +604,7 @@ static this() {
 				parser.lexer.expect!(Token.Symbol)(Symbol!")");
 			}
 			else {
-				result.args ~= parser.readExpr(4);
+				result.args ~= parser.readExpr(49);
 			}
 			result.span = merge(lhs.span, parser.lexer.last.span);
 			return result;

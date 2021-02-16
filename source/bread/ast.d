@@ -179,6 +179,10 @@ enum BinaryOp {
 	Gt,
 	Le,
 	Ge,
+
+	// boolean
+	And,
+	Or,
 }
 
 final class BinaryExpr : Expr {

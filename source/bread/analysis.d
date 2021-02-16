@@ -38,6 +38,19 @@ struct Value {
 
 	Value operate(Operation op, Value[] args) {
 		return payload.match!(
+			(bool value) {
+				enum OpHandler(Operation op, string opStr) = "
+					case "~op.stringof~":
+						return Value(value"~opStr~"args[0].payload.expect!bool);
+				";
+				switch (op) {
+					// boolean
+					mixin(OpHandler!(Operation.And, "&&"));
+					mixin(OpHandler!(Operation.Or, "||"));
+				default:
+					assert(0);
+				}
+			},
 			(int value) {
 				enum OpHandler(Operation op, string opStr) = "
 					case "~op.stringof~":
@@ -94,6 +107,10 @@ enum Operation {
 	Gt,
 	Le,
 	Ge,
+
+	// boolean
+	And,
+	Or,
 
 	// misc
 	Call,
@@ -169,6 +186,17 @@ final class BoolType : Type {
 
 	override bool isRuntimeType() {
 		return true;
+	}
+
+	override Type typeBinary(BinaryOp op, Type arg) {
+		if (arg is instance && [
+			BinaryOp.And,
+			BinaryOp.Or,
+		].canFind(op)) {
+			return instance;
+		}
+
+		return null;
 	}
 
 	override string toString() const {
