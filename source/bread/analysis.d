@@ -262,6 +262,66 @@ final class FunctionType : Type {
 	}
 }
 
+private Type checkFunctionBody(Stat[] body, Environment env, bool isTemplate) {
+	Type[] possibleReturns;
+	foreach (stat; body) {
+		if (Decl decl = cast(Decl) stat) {
+			if (!decl.isStatic) {
+				Type typeType = env.check(decl.type, true);
+				if (!TypeType.instance.accepts(typeType)) {
+					addStack(decl.type.span);
+					throw new AnalysisException("expected type, not value of type '"
+						~ typeType.toString ~ "'");
+				}
+				Type type = env.eval(decl.type).payload.expect!Type;
+				env.vars[decl.name] = Environment.Var(type);
+				Type initType = env.check(decl.initValue, isTemplate);
+				if (!type.accepts(initType)) {
+					addStack(decl.initValue.span);
+					throw new AnalysisException("value of type '"
+						~ initType.toString ~ "' is not assignable to variable of type '"
+						~ type.toString ~ "'");
+				}
+			}
+		}
+		else if (Return returnStat = cast(Return) stat) {
+			possibleReturns ~= env.check(returnStat.value, isTemplate);
+		}
+		else if (ExprStat exprStat = cast(ExprStat) stat) {
+			env.check(exprStat.value, isTemplate);
+		}
+	}
+	if (possibleReturns.length == 0) {
+		return VoidType.instance;
+	}
+	else if (possibleReturns.length == 1) {
+		return possibleReturns[0];
+	}
+	else {
+		assert(0); // TODO: union type
+	}
+}
+
+private Value evalFunctionBody(Stat[] body, Environment env) {
+	foreach (stat; body) {
+		if (Decl decl = cast(Decl) stat) {
+			if (!decl.isStatic) {
+				env.vars[decl.name] = Environment.Var(
+					null,
+					Nullable!Value(env.eval(decl.initValue)),
+				);
+			}
+		}
+		else if (Return returnStat = cast(Return) stat) {
+			return env.eval(returnStat.value);
+		}
+		else if (ExprStat exprStat = cast(ExprStat) stat) {
+			env.eval(exprStat.value);
+		}
+	}
+	return Value(null);
+}
+
 final class TemplateType : Type {
 	Type[] paramTypes;
 	string idName;
@@ -295,7 +355,6 @@ final class TemplateType : Type {
 			}
 		}
 
-		Type realReturnType;
 		Environment funcInner = new Environment;
 		funcInner.parent = env;
 		foreach (i, param; expr.params) {
@@ -315,42 +374,7 @@ final class TemplateType : Type {
 				}
 			}
 		}
-		foreach (stat; expr.body) {
-			if (Decl decl = cast(Decl) stat) {
-				if (!decl.isStatic) {
-					Type typeType = funcInner.check(decl.type, true);
-					if (!TypeType.instance.accepts(typeType)) {
-						addStack(decl.type.span);
-						throw new AnalysisException("expected type, not value of type '"
-							~ typeType.toString ~ "'");
-					}
-					Type type = funcInner.eval(decl.type).payload.expect!Type;
-					funcInner.vars[decl.name] = Environment.Var(type);
-					Type initType = funcInner.check(decl.initValue, true);
-					if (!type.accepts(initType)) {
-						addStack(decl.initValue.span);
-						throw new AnalysisException("value of type '"
-							~ initType.toString ~ "' is not assignable to variable of type '"
-							~ type.toString ~ "'");
-					}
-				}
-			}
-			else if (Return returnStat = cast(Return) stat) {
-				if (realReturnType is null) {
-					realReturnType = funcInner.check(returnStat.value, true);
-				}
-				else {
-					assert(0); // TODO: this
-				}
-			}
-			else if (ExprStat exprStat = cast(ExprStat) stat) {
-				funcInner.check(exprStat.value, true);
-			}
-		}
-		if (realReturnType is null) {
-			realReturnType = VoidType.instance;
-		}
-		return realReturnType;
+		return checkFunctionBody(expr.body, funcInner, true);
 	}
 
 	override string toString() const {
@@ -598,7 +622,6 @@ final class Environment {
 					throw new AnalysisException("cannot use type in non-static evaluation context");
 				}
 			}
-			Type realReturnType;
 			Environment funcInner = new Environment;
 			funcInner.parent = this;
 			foreach (stat; expr.body) {
@@ -618,41 +641,7 @@ final class Environment {
 			foreach (i, param; expr.params) {
 				funcInner.vars[param.name] = Var(paramTypes[i]);
 			}
-			foreach (stat; expr.body) {
-				if (Decl decl = cast(Decl) stat) {
-					if (!decl.isStatic) {
-						Type typeType = funcInner.check(decl.type, true);
-						if (!TypeType.instance.accepts(typeType)) {
-							addStack(decl.type.span);
-							throw new AnalysisException("expected type, not value of type '"
-								~ typeType.toString ~ "'");
-						}
-						Type type = funcInner.eval(decl.type).payload.expect!Type;
-						funcInner.vars[decl.name] = Var(type);
-						Type initType = funcInner.check(decl.initValue, false);
-						if (!type.accepts(initType)) {
-							addStack(decl.initValue.span);
-							throw new AnalysisException("value of type '"
-								~ initType.toString ~ "' is not assignable to variable of type '"
-								~ type.toString ~ "'");
-						}
-					}
-				}
-				else if (Return returnStat = cast(Return) stat) {
-					if (realReturnType is null) {
-						realReturnType = funcInner.check(returnStat.value, false);
-					}
-					else {
-						assert(0); // TODO: this
-					}
-				}
-				else if (ExprStat exprStat = cast(ExprStat) stat) {
-					funcInner.check(exprStat.value, false);
-				}
-			}
-			if (realReturnType is null) {
-				realReturnType = VoidType.instance;
-			}
+			Type realReturnType = checkFunctionBody(expr.body, funcInner, false);
 			if (!returnType.accepts(realReturnType)) {
 				throw new AnalysisException("return type '" ~ realReturnType.toString
 					~ "' is not assignable to '" ~ returnType.toString ~ "'");
@@ -772,23 +761,7 @@ final class Environment {
 				foreach (i, param; expr.params) {
 					funcInner.vars[param.name] = Var(null, Nullable!Value(args[i]));
 				}
-				foreach (stat; expr.body) {
-					if (Decl decl = cast(Decl) stat) {
-						if (!decl.isStatic) {
-							funcInner.vars[decl.name] = Var(
-								null,
-								Nullable!Value(funcInner.eval(decl.initValue)),
-							);
-						}
-					}
-					else if (Return returnStat = cast(Return) stat) {
-						return funcInner.eval(returnStat.value);
-					}
-					else if (ExprStat exprStat = cast(ExprStat) stat) {
-						funcInner.eval(exprStat.value);
-					}
-				}
-				return Value(null);
+				return evalFunctionBody(expr.body, funcInner);
 			});
 		}
 		else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
@@ -815,23 +788,7 @@ final class Environment {
 						}
 					}
 				}
-				foreach (stat; expr.body) {
-					if (Decl decl = cast(Decl) stat) {
-						if (!decl.isStatic) {
-							funcInner.vars[decl.name] = Var(
-								null,
-								Nullable!Value(funcInner.eval(decl.initValue)),
-							);
-						}
-					}
-					else if (Return returnStat = cast(Return) stat) {
-						return funcInner.eval(returnStat.value);
-					}
-					else if (ExprStat exprStat = cast(ExprStat) stat) {
-						funcInner.eval(exprStat.value);
-					}
-				}
-				return Value(null);
+				return evalFunctionBody(expr.body, funcInner);
 			});
 		}
 		else {
