@@ -262,8 +262,41 @@ final class FunctionType : Type {
 	}
 }
 
-private Type checkFunctionBody(Stat[] body, Environment env, bool isTemplate) {
+private Type checkFunctionBody(Stat[] body, Environment env,
+		void delegate() postStatic, bool isTemplate) {
+	Type[] possibleReturns = checkBody(body, env, postStatic, isTemplate);
+	if (possibleReturns.length == 0) {
+		return VoidType.instance;
+	}
+	else {
+		Type result = possibleReturns[0];
+		foreach (v; possibleReturns[1 .. $]) {
+			if (!result.accepts(v)) {
+				assert(0); // TODO: union type instead
+			}
+		}
+		return result;
+	}
+}
+
+private Type[] checkBody(Stat[] body, Environment env,
+		void delegate() postStatic, bool isTemplate) {
 	Type[] possibleReturns;
+	foreach (stat; body) {
+		if (Decl decl = cast(Decl) stat) {
+			if (decl.isStatic) {
+				env.staticDecls[decl.name] = decl;
+			}
+		}
+	}
+	foreach (stat; body) {
+		if (Decl decl = cast(Decl) stat) {
+			if (decl.isStatic) {
+				env.staticVar(decl.name);
+			}
+		}
+	}
+	postStatic();
 	foreach (stat; body) {
 		if (Decl decl = cast(Decl) stat) {
 			if (!decl.isStatic) {
@@ -290,19 +323,51 @@ private Type checkFunctionBody(Stat[] body, Environment env, bool isTemplate) {
 		else if (ExprStat exprStat = cast(ExprStat) stat) {
 			env.check(exprStat.value, isTemplate);
 		}
+		else if (If ifStat = cast(If) stat) {
+			Type condType = env.check(ifStat.cond, isTemplate);
+			if (!BoolType.instance.accepts(condType)) {
+				addStack(ifStat.cond.span);
+				throw new AnalysisException("value of type '"
+					~ condType.toString ~ "' cannot be used as condition");
+			}
+			Environment thenEnv = new Environment;
+			thenEnv.parent = env;
+			possibleReturns ~= checkBody(ifStat.body, thenEnv, {}, isTemplate);
+
+			Environment elseEnv = new Environment;
+			elseEnv.parent = env;
+			possibleReturns ~= checkBody(ifStat.elseBody, elseEnv, {}, isTemplate);
+		}
 	}
-	if (possibleReturns.length == 0) {
-		return VoidType.instance;
-	}
-	else if (possibleReturns.length == 1) {
-		return possibleReturns[0];
+	return possibleReturns;
+}
+
+private Value evalFunctionBody(Stat[] body, Environment env, void delegate() postStatic) {
+	Nullable!Value result = evalBody(body, env, postStatic);
+	if (result.isNull) {
+		return Value(null);
 	}
 	else {
-		assert(0); // TODO: union type
+		return result.get;
 	}
 }
 
-private Value evalFunctionBody(Stat[] body, Environment env) {
+private Nullable!Value evalBody(Stat[] body, Environment env, void delegate() postStatic) {
+	foreach (stat; body) {
+		if (Decl decl = cast(Decl) stat) {
+			if (decl.isStatic) {
+				env.staticDecls[decl.name] = decl;
+			}
+		}
+	}
+	foreach (stat; body) {
+		if (Decl decl = cast(Decl) stat) {
+			if (decl.isStatic) {
+				env.staticVar(decl.name);
+			}
+		}
+	}
+	postStatic();
 	foreach (stat; body) {
 		if (Decl decl = cast(Decl) stat) {
 			if (!decl.isStatic) {
@@ -313,13 +378,27 @@ private Value evalFunctionBody(Stat[] body, Environment env) {
 			}
 		}
 		else if (Return returnStat = cast(Return) stat) {
-			return env.eval(returnStat.value);
+			return Nullable!Value(env.eval(returnStat.value));
 		}
 		else if (ExprStat exprStat = cast(ExprStat) stat) {
 			env.eval(exprStat.value);
 		}
+		else if (If ifStat = cast(If) stat) {
+			Environment childEnv = new Environment;
+			childEnv.parent = env;
+			Nullable!Value result;
+			if (env.eval(ifStat.cond).payload.expect!bool) {
+				result = evalBody(ifStat.body, childEnv, {});
+			}
+			else {
+				result = evalBody(ifStat.elseBody, childEnv, {});
+			}
+			if (!result.isNull) {
+				return result;
+			}
+		}
 	}
-	return Value(null);
+	return Nullable!Value.init;
 }
 
 final class TemplateType : Type {
@@ -360,21 +439,7 @@ final class TemplateType : Type {
 		foreach (i, param; expr.params) {
 			funcInner.staticVars[param.name] = Environment.StaticVar(paramTypes[i], args[i]);
 		}
-		foreach (stat; expr.body) {
-			if (Decl decl = cast(Decl) stat) {
-				if (decl.isStatic) {
-					funcInner.staticDecls[decl.name] = decl;
-				}
-			}
-		}
-		foreach (stat; expr.body) {
-			if (Decl decl = cast(Decl) stat) {
-				if (decl.isStatic) {
-					funcInner.staticVar(decl.name);
-				}
-			}
-		}
-		return checkFunctionBody(expr.body, funcInner, true);
+		return checkFunctionBody(expr.body, funcInner, {}, true);
 	}
 
 	override string toString() const {
@@ -535,6 +600,18 @@ final class Environment {
 				}
 				return TypeType.instance;
 			}
+			else if (expr.value == "bool-type") {
+				if (!staticEval) {
+					throw new AnalysisException("can't create type in non-static evaluation context");
+				}
+				return TypeType.instance;
+			}
+			else if (expr.value == "true") {
+				return BoolType.instance;
+			}
+			else if (expr.value == "false") {
+				return BoolType.instance;
+			}
 			else if (expr.value == "print") {
 				return new FunctionType(VoidType.instance, [IntType.instance]);
 			}
@@ -624,24 +701,11 @@ final class Environment {
 			}
 			Environment funcInner = new Environment;
 			funcInner.parent = this;
-			foreach (stat; expr.body) {
-				if (Decl decl = cast(Decl) stat) {
-					if (decl.isStatic) {
-						funcInner.staticDecls[decl.name] = decl;
-					}
+			Type realReturnType = checkFunctionBody(expr.body, funcInner, {
+				foreach (i, param; expr.params) {
+					funcInner.vars[param.name] = Var(paramTypes[i]);
 				}
-			}
-			foreach (stat; expr.body) {
-				if (Decl decl = cast(Decl) stat) {
-					if (decl.isStatic) {
-						funcInner.staticVar(decl.name);
-					}
-				}
-			}
-			foreach (i, param; expr.params) {
-				funcInner.vars[param.name] = Var(paramTypes[i]);
-			}
-			Type realReturnType = checkFunctionBody(expr.body, funcInner, false);
+			}, false);
 			if (!returnType.accepts(realReturnType)) {
 				throw new AnalysisException("return type '" ~ realReturnType.toString
 					~ "' is not assignable to '" ~ returnType.toString ~ "'");
@@ -698,6 +762,15 @@ final class Environment {
 			else if (expr.value == "void-type") {
 				return Value(cast(Type) VoidType.instance);
 			}
+			else if (expr.value == "bool-type") {
+				return Value(cast(Type) BoolType.instance);
+			}
+			else if (expr.value == "true") {
+				return Value(true);
+			}
+			else if (expr.value == "false") {
+				return Value(false);
+			}
 			else if (expr.value == "print") {
 				return Value(cast(Value.Function)(Value[] args) {
 					import std.stdio : writeln;
@@ -744,24 +817,11 @@ final class Environment {
 			return Value(cast(Value.Function)(Value[] args) {
 				Environment funcInner = new Environment;
 				funcInner.parent = this;
-				foreach (stat; expr.body) {
-					if (Decl decl = cast(Decl) stat) {
-						if (decl.isStatic) {
-							funcInner.staticDecls[decl.name] = decl;
-						}
+				return evalFunctionBody(expr.body, funcInner, {
+					foreach (i, param; expr.params) {
+						funcInner.vars[param.name] = Var(null, Nullable!Value(args[i]));
 					}
-				}
-				foreach (stat; expr.body) {
-					if (Decl decl = cast(Decl) stat) {
-						if (decl.isStatic) {
-							funcInner.staticVar(decl.name);
-						}
-					}
-				}
-				foreach (i, param; expr.params) {
-					funcInner.vars[param.name] = Var(null, Nullable!Value(args[i]));
-				}
-				return evalFunctionBody(expr.body, funcInner);
+				});
 			});
 		}
 		else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
@@ -774,21 +834,7 @@ final class Environment {
 						args[i],
 					);
 				}
-				foreach (stat; expr.body) {
-					if (Decl decl = cast(Decl) stat) {
-						if (decl.isStatic) {
-							funcInner.staticDecls[decl.name] = decl;
-						}
-					}
-				}
-				foreach (stat; expr.body) {
-					if (Decl decl = cast(Decl) stat) {
-						if (decl.isStatic) {
-							funcInner.staticVar(decl.name);
-						}
-					}
-				}
-				return evalFunctionBody(expr.body, funcInner);
+				return evalFunctionBody(expr.body, funcInner, {});
 			});
 		}
 		else {

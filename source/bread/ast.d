@@ -96,7 +96,21 @@ final class Return : Stat {
 	mixin prettyPrinter!(typeof(this));
 }
 
-final class Decl : Stat {
+final class If : Stat {
+	Expr cond;
+
+	Stat[] body;
+
+	Stat[] elseBody;
+
+	mixin prettyPrinter!(typeof(this));
+}
+
+abstract class DeclBase : Stat {
+	mixin prettyPrinter!(typeof(this));
+}
+
+final class Decl : DeclBase {
 	bool isStatic;
 
 	string name;
@@ -108,6 +122,16 @@ final class Decl : Stat {
 
 	mixin prettyPrinter!(typeof(this));
 }
+
+// final class StaticIf : DeclBase {
+// 	Expr cond;
+
+// 	Stat[] body;
+
+// 	Stat[] elseBody;
+
+// 	mixin prettyPrinter!(typeof(this));
+// }
 
 abstract class Expr : BaseNode {
 	mixin prettyPrinter!(typeof(this));

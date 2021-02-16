@@ -775,8 +775,37 @@ final class Parser {
 			}
 			return result;
 		}
+		else if (lexer.tryNext!(Token.Keyword)(Keyword!"if")) {
+			If result = new If;
+			lexer.expect!(Token.Symbol)(Symbol!"(");
+			result.cond = readExpr;
+			lexer.expect!(Token.Symbol)(Symbol!")");
+			lexer.expect!(Token.Symbol)(Symbol!"{");
+			while (lexer.until!(Token.Symbol)(Symbol!"}")) {
+				result.body ~= readStat;
+			}
+			lexer.expect!(Token.Symbol)(Symbol!"}");
+			if (lexer.tryNext!(Token.Keyword)(Keyword!"else")) {
+				lexer.expect!(Token.Symbol)(Symbol!"{");
+				while (lexer.until!(Token.Symbol)(Symbol!"}")) {
+					result.elseBody ~= readStat;
+				}
+				lexer.expect!(Token.Symbol)(Symbol!"}");
+			}
+			result.span = merge(start, lexer.last.span);
+			return result;
+		}
 
 		Lexer saved = lexer.save();
+
+		// if (lexer.tryNext!(Token.Keyword)(Keyword!"static")) {
+		// 	if (lexer.tryNext!(Token.Keyword)(Keyword!"if")) {
+
+		// 	}
+		// 	else {
+		// 		lexer = saved.save();
+		// 	}
+		// }
 
 		try {
 			Expr expr = readExpr;
@@ -789,7 +818,7 @@ final class Parser {
 		}
 		catch (ParsingException) {}
 
-		lexer = saved;
+		lexer = saved.save();
 		return readDecl;
 	}
 
