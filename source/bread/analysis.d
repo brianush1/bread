@@ -563,6 +563,7 @@ final class Environment {
 		Nullable!Value value;
 	}
 
+	Type[string] staticTypes;
 	StaticVar[string] staticVars;
 	Decl[string] staticDecls;
 	bool[string] staticVisited;
@@ -591,8 +592,6 @@ final class Environment {
 		scope (exit)
 			popStack();
 
-		Value value = eval(decl.initValue);
-
 		Type type;
 
 		if (decl.type) {
@@ -603,6 +602,8 @@ final class Environment {
 
 			type = eval(decl.type).payload.expect!Type;
 
+			staticTypes[name] = type;
+
 			Type realType = check(decl.initValue, true);
 			if (!type.accepts(realType)) {
 				throw new AnalysisException("'" ~ realType.toString
@@ -612,6 +613,8 @@ final class Environment {
 		else {
 			type = check(decl.initValue, true);
 		}
+
+		Value value = eval(decl.initValue);
 
 		staticVars[name] = StaticVar(
 			type,
@@ -631,7 +634,8 @@ final class Environment {
 				result = vars[expr.name].type;
 			}
 			else if (expr.name in staticDecls || expr.name in staticVars) {
-				result = staticVar(expr.name).type;
+				result = expr.name in staticTypes ? staticTypes[expr.name]
+					: staticVar(expr.name).type;
 			}
 			else if (parent) {
 				result = parent.check(expr, staticEval);
