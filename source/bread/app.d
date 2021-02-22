@@ -2,6 +2,7 @@ import bread.source;
 import bread.analysis;
 import bread.parser;
 import bread.ast;
+import bread.backend.js;
 import std;
 
 void main() {
@@ -9,9 +10,11 @@ void main() {
 	Parser parser = new Parser(source);
 	try {
 		Program prog = parser.readProgram;
-		Environment env = analyze(prog);
-		Value v = env.staticVars["main"].value;
-		writeln(v.operate(Operation.Call, []));
+		auto ir = compile(prog);
+		string compiled = compile(ir);
+		File file = File("test.toast.js", "w");
+		file.write(compiled);
+		file.close();
 	}
 	catch (ParsingException ex) {
 		ex.diagnostic.report();

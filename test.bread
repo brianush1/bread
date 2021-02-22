@@ -1,16 +1,40 @@
 type int = __builtin_value__ "int-type";
 type void = __builtin_value__ "void-type";
+type bool = __builtin_value__ "bool-type";
+bool true = __builtin_value__ "true";
+bool false = __builtin_value__ "false";
 
 // 'static' in Bread means the same as 'enum' in D basically
 // everything in the global scope is automatically marked 'static'
 
-int main() {
-	template mul2!(type T) {
-		T result(T value) {
-			return value + value;
-		}
-		return result;
-	}
+int x = foo * 3;
+int foo = 2;
 
-	return mul2!int(2);
+function(void; int) print = __builtin_value__ "print";
+
+//void foot() {
+	print(5);
+	return print(3);
+}
+
+//template prant!(type T) {
+	return void(T value) {
+		__builtin_value__ "print"(value);
+	};
+}
+
+//void xa = prant!int(fib(17)); // TODO: check for variable shadows
+
+//void main() {
+	//int x = prant!(int, fib(17));
+	//print(x);
+}
+
+//int fib(int x) {
+	if (x <= 1) {
+		return x;
+	}
+	else {
+		return fib(x - 1) + fib(x - 2);
+	}
 }

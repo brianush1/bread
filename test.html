@@ -1,0 +1,9 @@
+<body>
+	<script>
+		for (let i = 0; i < 2_000_000; ++i) {
+			const s = document.createElement("span");
+			s.innerText = `thing #${i}`;
+			document.body.appendChild(s);
+		}
+	</script>
+</body>

@@ -1,6 +1,7 @@
 module bread.analysis;
 import bread.source;
 import bread.ast;
+import ir = bread.ir;
 import std.algorithm;
 import std.range;
 import std.array;
@@ -20,7 +21,12 @@ private T expect(T, K)(K sumType) {
 }
 
 struct Value {
-	alias Function = Value delegate(Value[]);
+	alias FunctionDelegate = Value delegate(Value[]);
+
+	struct Function {
+		FunctionDelegate value;
+		ir.Expr irNode;
+	}
 
 	alias Payload = SumType!(
 		typeof(null),
@@ -30,9 +36,14 @@ struct Value {
 		Function,
 	);
 
+	size_t id;
 	Payload payload;
 
+	private static size_t valueCounter;
+
 	this(Args...)(Args args) {
+		valueCounter += 1;
+		id = valueCounter;
 		payload = Payload(args);
 	}
 
@@ -79,11 +90,10 @@ struct Value {
 				switch (op) {
 				case Operation.Call:
 				case Operation.TemplateCall:
-					return value(args);
+					return value.value(args);
 				default:
 					assert(0);
 				}
-				return value(args);
 			},
 			delegate Value(_) {
 				assert(0);
@@ -539,13 +549,126 @@ void popStack() {
 	stack = stack[0 .. $ - 1];
 }
 
-Environment analyze(Program program) {
-	Environment result = new Environment;
+private ir.Expr[size_t] compiledValues;
+
+ir.Expr compileValue(Value value) {
+	if (value.id !in compiledValues) {
+		value.payload.match!(
+			(typeof(null) x) {
+				compiledValues[value.id] = new ir.Nil;
+			},
+			(bool x) {
+				compiledValues[value.id] = x ? new ir.True : new ir.False;
+			},
+			(int x) {
+				ir.Int node = new ir.Int;
+				node.value = x;
+				compiledValues[value.id] = node;
+			},
+			(Value.Function x) {
+				compiledValues[value.id] = x.irNode;
+			},
+			delegate void(_) {
+				assert(0, typeof(_).stringof);
+			},
+		);
+	}
+	ir.VarAccess result = new ir.VarAccess;
+	result.ns = "val";
+	result.name = value.id.to!string;
+	return result;
+}
+
+ir.Program compile(Program program) {
+	ir.Program result = new ir.Program;
+	Environment env = new Environment;
+	compiledValues.clear;
 	foreach (decl; program.decls) {
-		result.staticDecls[decl.name] = decl;
+		env.staticDecls[decl.name] = decl;
 	}
 	foreach (decl; program.decls) {
-		result.staticVar(decl.name);
+		Environment.StaticVar var = env.staticVar(decl.name);
+		if (!var.type.isRuntimeType) {
+			continue;
+		}
+		ir.Decl irDecl = new ir.Decl;
+		irDecl.name = decl.name;
+		irDecl.initValue = compileValue(var.value);
+		result.body ~= irDecl;
+	}
+	ir.Decl[] compiledValuesDecls;
+	// FIXME: dependency graph
+	foreach (id, expr; compiledValues) {
+		ir.Decl decl = new ir.Decl;
+		decl.name = id.to!string;
+		decl.initValue = expr;
+		decl.ns = "val";
+		compiledValuesDecls ~= decl;
+	}
+	result.body = compiledValuesDecls ~ result.body;
+	// result.body = cast(ir.Decl[]) compileBody(cast(Stat[]) program.decls, env, {});
+	return result;
+}
+
+private ir.Stat[] compileBody(Stat[] stats, Environment env, void delegate() postStatic) {
+	ir.Stat[] result;
+	foreach (stat; stats) {
+		if (Decl decl = cast(Decl) stat) {
+			if (decl.isStatic) {
+				env.staticDecls[decl.name] = decl;
+			}
+		}
+	}
+	foreach (stat; stats) {
+		if (Decl decl = cast(Decl) stat) {
+			if (decl.isStatic) {
+				env.staticVar(decl.name);
+			}
+		}
+	}
+	postStatic();
+	foreach (name; env.orderedStaticVars) {
+		Decl decl = env.staticDecls[name];
+		if (!decl.type || !env.eval(decl.type).payload.expect!Type.isRuntimeType) {
+			continue;
+		}
+		ir.Decl irDecl = new ir.Decl;
+		irDecl.name = decl.name;
+		irDecl.initValue = env.compile(decl.initValue);
+		result ~= irDecl;
+	}
+	foreach (stat; stats) {
+		if (Decl decl = cast(Decl) stat) {
+			if (!decl.isStatic) {
+				ir.Decl node = new ir.Decl;
+				node.name = decl.name;
+				node.initValue = env.compile(decl.initValue);
+				result ~= node;
+			}
+		}
+		else if (Return returnStat = cast(Return) stat) {
+			ir.Return node = new ir.Return;
+			node.value = env.compile(returnStat.value);
+			result ~= node;
+		}
+		else if (ExprStat exprStat = cast(ExprStat) stat) {
+			ir.ExprStat node = new ir.ExprStat;
+			node.value = env.compile(exprStat.value);
+			result ~= node;
+		}
+		else if (If ifStat = cast(If) stat) {
+			ir.If node = new ir.If;
+			node.cond = env.compile(ifStat.cond);
+
+			Environment thenEnv = new Environment;
+			thenEnv.parent = env;
+			node.body = compileBody(ifStat.body, thenEnv, {});
+
+			Environment elseEnv = new Environment;
+			elseEnv.parent = env;
+			node.elseBody = compileBody(ifStat.elseBody, elseEnv, {});
+			result ~= node;
+		}
 	}
 	return result;
 }
@@ -567,6 +690,7 @@ final class Environment {
 	StaticVar[string] staticVars;
 	Decl[string] staticDecls;
 	bool[string] staticVisited;
+	string[] orderedStaticVars;
 
 	Environment parent;
 
@@ -615,6 +739,8 @@ final class Environment {
 		}
 
 		Value value = eval(decl.initValue);
+
+		orderedStaticVars ~= name;
 
 		staticVars[name] = StaticVar(
 			type,
@@ -774,6 +900,9 @@ final class Environment {
 			return new FunctionType(returnType, paramTypes);
 		}
 		else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
+			if (!staticEval) {
+				assert(0);
+			}
 			Type[] paramTypeTypes = expr.params.map!(x => check(x.type, true)).array;
 			foreach (i; 0 .. paramTypeTypes.length) {
 				if (!TypeType.instance.accepts(paramTypeTypes[i])) {
@@ -833,13 +962,13 @@ final class Environment {
 				return Value(false);
 			}
 			else if (expr.value == "print") {
-				return Value(cast(Value.Function)(Value[] args) {
+				return Value(Value.Function(cast(Value.FunctionDelegate)(Value[] args) {
 					import std.stdio : writeln;
 
 					writeln(args[0].payload.expect!int);
 
 					return Value(null);
-				});
+				}, new ir.Print));
 			}
 			else {
 				throw new AnalysisException("unknown built-in '" ~ expr.value ~ "'");
@@ -883,7 +1012,7 @@ final class Environment {
 			return Value(cast(Type) new FunctionType(returnType, paramTypes));
 		}
 		else if (FuncExpr expr = cast(FuncExpr) expr_) {
-			return Value(cast(Value.Function)(Value[] args) {
+			return Value(Value.Function(cast(Value.FunctionDelegate)(Value[] args) {
 				Environment funcInner = new Environment;
 				funcInner.parent = this;
 				return evalFunctionBody(expr.body, funcInner, {
@@ -891,10 +1020,10 @@ final class Environment {
 						funcInner.vars[param.name] = Var(null, Nullable!Value(args[i]));
 					}
 				});
-			});
+			}));
 		}
 		else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
-			return Value(cast(Value.Function)(Value[] args) {
+			return Value(Value.Function(cast(Value.FunctionDelegate)(Value[] args) {
 				Environment funcInner = new Environment;
 				funcInner.parent = this;
 				foreach (i, param; expr.params) {
@@ -904,7 +1033,93 @@ final class Environment {
 					);
 				}
 				return evalFunctionBody(expr.body, funcInner, {});
-			});
+			}));
+		}
+		else {
+			assert(0, "dunno how to handle " ~ expr_.toString);
+		}
+	}
+
+	/**
+
+	Converts the expression into IR.
+
+	Expressions are assumed to be correctly formed when passed into this method.
+	However, this function may still make calls to $(REF check) for optimization purposes.
+
+	*/
+	ir.Expr compile(Expr expr_) {
+		addStack(expr_.span);
+		scope (exit)
+			popStack();
+
+		if (VarAccess expr = cast(VarAccess) expr_) {
+			auto result = new ir.VarAccess;
+			result.name = expr.name;
+			return result;
+		}
+		else if (BuiltinValue expr = cast(BuiltinValue) expr_) {
+			if (expr.value == "true") {
+				return new ir.True;
+			}
+			else if (expr.value == "false") {
+				return new ir.False;
+			}
+			else if (expr.value == "print") {
+				return new ir.Print;
+			}
+			else {
+				assert(0);
+			}
+		}
+		else if (IntLiteral expr = cast(IntLiteral) expr_) {
+			auto result = new ir.Int;
+			result.value = expr.value;
+			return result;
+		}
+		else if (NilLiteral expr = cast(NilLiteral) expr_) {
+			return new ir.Nil;
+		}
+		else if (BinaryExpr expr = cast(BinaryExpr) expr_) {
+			auto result = new ir.Binary;
+			result.op = expr.op;
+			result.lhsType = check(expr.lhs, false);
+			result.lhs = compile(expr.lhs);
+			result.rhsType = check(expr.rhs, false);
+			result.rhs = compile(expr.rhs);
+			return result;
+		}
+		else if (CallExpr expr = cast(CallExpr) expr_) {
+			auto result = new ir.Call;
+			result.funcType = check(expr.func, false);
+			result.func = compile(expr.func);
+			result.argTypes = expr.args.map!(arg => check(arg, false)).array;
+			result.args = expr.args.map!(arg => compile(arg)).array;
+			return result;
+		}
+		else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
+			Value result = eval(expr.templat).operate(Operation.TemplateCall,
+				expr.args.map!(x => eval(x)).array);
+			// auto result = new ir.Call;
+			// result.funcType = null;
+			// result.func = compile(expr.templat);
+			// foreach (i; 0 .. expr.args.length) {
+			// 	Type type = check(expr.args[i], true);
+			// 	if (type.isRuntimeType) {
+			// 		result.argTypes ~= type;
+			// 		result.args ~= compile(expr.args[i]);
+			// 	}
+			// }
+			debug { import std.stdio : writeln; try { writeln(result); } catch (Exception) {} }
+			return new ir.False;
+		}
+		else if (FuncExpr expr = cast(FuncExpr) expr_) {
+			auto result = new ir.Function;
+			result.params = expr.params.map!(x => x.name).array;
+			Environment inner = new Environment;
+			inner.parent = this;
+			result.body = compileBody(expr.body, inner, {});
+			return result;
 		}
 		else {
 			assert(0, "dunno how to handle " ~ expr_.toString);
