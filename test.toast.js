@@ -1,28 +1,24 @@
 // compiled Bread code
 
-function brstd$binary(op, lhs, rhs) {
-	// TODO: implement this
-	throw 0;
-}
-
-function brstd$call(func, args) {
-	// TODO: implement this
-	throw 0;
-}
-
 function brstd$print(arg) {
 	console.log(arg);
 }
 
-let brval$13 = brstd$print;
-let brval$7 = true;
-let brval$11 = 6;
-let brval$8 = false;
-let brval$9 = 2;
-let br$true = brval$7;
-let br$false = brval$8;
-let br$x = brval$11;
-let br$foo = brval$9;
-let br$print = brval$13;
-
-br$main();
+let br$rC91wA = true;
+let br$Q_vDZw = false;
+let br$CdMV8g = brstd$print;
+let br$JFdG2A = function(br$WIw6wQ) {
+	if ((br$WIw6wQ <= 1)) {
+		return br$WIw6wQ;
+	} else {}
+	return (br$JFdG2A((br$WIw6wQ - 1 | 0)) + br$JFdG2A((br$WIw6wQ - 2 | 0)) | 0);
+};
+let br$5idXrg = function() {
+	br$CdMV8g(5);
+	return br$CdMV8g(3);
+};
+let br$WFGlGQ = function() {
+	br$CdMV8g(br$JFdG2A(17));
+	br$5idXrg();
+};
+br$WFGlGQ();

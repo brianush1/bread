@@ -586,30 +586,31 @@ static this() {
 			return cast(Expr) callResult;
 		},
 	);
-	parselets ~= InfixParselet(
-		50,
-		(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"!"); },
-		(Parser parser, Expr lhs) {
-			parser.lexer.popFront;
+	// grep 'template impl'
+	// parselets ~= InfixParselet(
+	// 	50,
+	// 	(Parser parser) { return parser.lexer.isNext!(Token.Symbol)(Symbol!"!"); },
+	// 	(Parser parser, Expr lhs) {
+	// 		parser.lexer.popFront;
 
-			TemplateCallExpr result = new TemplateCallExpr;
-			result.templat = lhs;
-			if (parser.lexer.tryNext!(Token.Symbol)(Symbol!"(")) {
-				while (parser.lexer.until!(Token.Symbol)(Symbol!")")) {
-					result.args ~= parser.readExpr;
-					if (!parser.lexer.tryNext!(Token.Symbol)(Symbol!",")) {
-						break;
-					}
-				}
-				parser.lexer.expect!(Token.Symbol)(Symbol!")");
-			}
-			else {
-				result.args ~= parser.readExpr(49);
-			}
-			result.span = merge(lhs.span, parser.lexer.last.span);
-			return result;
-		},
-	);
+	// 		TemplateCallExpr result = new TemplateCallExpr;
+	// 		result.templat = lhs;
+	// 		if (parser.lexer.tryNext!(Token.Symbol)(Symbol!"(")) {
+	// 			while (parser.lexer.until!(Token.Symbol)(Symbol!")")) {
+	// 				result.args ~= parser.readExpr;
+	// 				if (!parser.lexer.tryNext!(Token.Symbol)(Symbol!",")) {
+	// 					break;
+	// 				}
+	// 			}
+	// 			parser.lexer.expect!(Token.Symbol)(Symbol!")");
+	// 		}
+	// 		else {
+	// 			result.args ~= parser.readExpr(49);
+	// 		}
+	// 		result.span = merge(lhs.span, parser.lexer.last.span);
+	// 		return result;
+	// 	},
+	// );
 }
 
 final class Parser {
@@ -670,37 +671,38 @@ final class Parser {
 	Decl readDecl(bool isGlobal = false) {
 		Span start = lexer.front.span;
 
-		if (lexer.tryNext!(Token.Keyword)(Keyword!"template")) {
-			string name = lexer.expect!(Token.Identifier).name;
+		// grep 'template impl'
+		// if (lexer.tryNext!(Token.Keyword)(Keyword!"template")) {
+		// 	string name = lexer.expect!(Token.Identifier).name;
 
-			Decl result = new Decl;
-			result.isStatic = true;
-			result.name = name;
-			TemplateExpr templat = new TemplateExpr;
-			lexer.expect!(Token.Symbol)(Symbol!"!");
-			lexer.expect!(Token.Symbol)(Symbol!"(");
-			while (lexer.until!(Token.Symbol)(Symbol!")")) {
-				Expr paramType = readExpr;
-				string paramName = lexer.expect!(Token.Identifier).name;
-				templat.params ~= TemplateExpr.Param(paramType, paramName);
-				if (!lexer.tryNext!(Token.Symbol)(Symbol!",")) {
-					break;
-				}
-			}
-			lexer.expect!(Token.Symbol)(Symbol!")");
-			auto startCurly = lexer.expect!(Token.Symbol)(Symbol!"{");
-			while (lexer.until!(Token.Symbol)(Symbol!"}")) {
-				templat.body ~= readStat;
-			}
-			lexer.expect!(Token.Symbol)(Symbol!"}");
+		// 	Decl result = new Decl;
+		// 	result.isStatic = true;
+		// 	result.name = name;
+		// 	TemplateExpr templat = new TemplateExpr;
+		// 	lexer.expect!(Token.Symbol)(Symbol!"!");
+		// 	lexer.expect!(Token.Symbol)(Symbol!"(");
+		// 	while (lexer.until!(Token.Symbol)(Symbol!")")) {
+		// 		Expr paramType = readExpr;
+		// 		string paramName = lexer.expect!(Token.Identifier).name;
+		// 		templat.params ~= TemplateExpr.Param(paramType, paramName);
+		// 		if (!lexer.tryNext!(Token.Symbol)(Symbol!",")) {
+		// 			break;
+		// 		}
+		// 	}
+		// 	lexer.expect!(Token.Symbol)(Symbol!")");
+		// 	auto startCurly = lexer.expect!(Token.Symbol)(Symbol!"{");
+		// 	while (lexer.until!(Token.Symbol)(Symbol!"}")) {
+		// 		templat.body ~= readStat;
+		// 	}
+		// 	lexer.expect!(Token.Symbol)(Symbol!"}");
 
-			result.initValue = templat;
-			result.span = templat.span = merge(start, startCurly.span);
+		// 	result.initValue = templat;
+		// 	result.span = templat.span = merge(start, startCurly.span);
 
-			templat.idName = name ~ "@" ~ templat.span.toString();
+		// 	templat.idName = name ~ "@" ~ templat.span.toString();
 
-			return result;
-		}
+		// 	return result;
+		// }
 
 		bool isStatic;
 		if (isGlobal) {

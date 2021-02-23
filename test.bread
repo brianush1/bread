@@ -7,12 +7,21 @@ bool false = __builtin_value__ "false";
 // 'static' in Bread means the same as 'enum' in D basically
 // everything in the global scope is automatically marked 'static'
 
-int x = foo * 3;
-int foo = 2;
-
 function(void; int) print = __builtin_value__ "print";
 
-//void foot() {
+int fib(int x) {
+	if (x <= 1) {
+		return x;
+	}
+	return fib(x - 1) + fib(x - 2);
+}
+
+void main() {
+	print(fib(17));
+	foot();
+}
+
+void foot() {
 	print(5);
 	return print(3);
 }
@@ -24,11 +33,6 @@ function(void; int) print = __builtin_value__ "print";
 }
 
 //void xa = prant!int(fib(17)); // TODO: check for variable shadows
-
-//void main() {
-	//int x = prant!(int, fib(17));
-	//print(x);
-}
 
 //int fib(int x) {
 	if (x <= 1) {

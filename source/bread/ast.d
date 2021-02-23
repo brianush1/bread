@@ -151,19 +151,20 @@ final class FuncExpr : Expr {
 	mixin prettyPrinter!(typeof(this));
 }
 
-final class TemplateExpr : Expr {
-	struct Param {
-		Expr type;
-		string name;
-	}
+// grep 'template impl'
+// final class TemplateExpr : Expr {
+// 	struct Param {
+// 		Expr type;
+// 		string name;
+// 	}
 
-	Param[] params;
-	Stat[] body;
+// 	Param[] params;
+// 	Stat[] body;
 
-	string idName;
+// 	string idName;
 
-	mixin prettyPrinter!(typeof(this));
-}
+// 	mixin prettyPrinter!(typeof(this));
+// }
 
 final class BinaryExpr : Expr {
 	BinaryOp op;
@@ -180,12 +181,13 @@ final class CallExpr : Expr {
 	mixin prettyPrinter!(typeof(this));
 }
 
-final class TemplateCallExpr : Expr {
-	Expr templat;
-	Expr[] args;
+// grep 'template impl'
+// final class TemplateCallExpr : Expr {
+// 	Expr templat;
+// 	Expr[] args;
 
-	mixin prettyPrinter!(typeof(this));
-}
+// 	mixin prettyPrinter!(typeof(this));
+// }
 
 final class VarAccess : Expr {
 	string name;

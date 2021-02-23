@@ -1,7 +1,14 @@
 module bread.ir;
-import bread.analysis;
 public import bread.enums : BinaryOp;
 import bread.source;
+import std.uuid;
+
+enum Type {
+	Int,
+	Bool,
+	Function,
+	Other,
+}
 
 abstract class Node {}
 
@@ -14,7 +21,6 @@ abstract class Stat : Node {}
 final class Decl : Stat {
 	string name;
 	Expr initValue;
-	string ns;
 }
 
 final class Return : Stat {
@@ -39,7 +45,6 @@ final class Int : Expr {
 
 final class VarAccess : Expr {
 	string name;
-	string ns;
 }
 
 final class True : Expr {}
@@ -52,20 +57,19 @@ final class Nil : Expr {}
 
 final class Binary : Expr {
 	BinaryOp op;
+	Type lhsType;
+	Type rhsType;
 
 	Expr lhs;
-	Type lhsType;
-
 	Expr rhs;
-	Type rhsType;
 }
 
 final class Call : Expr {
-	Expr func;
 	Type funcType;
-
-	Expr[] args;
 	Type[] argTypes;
+
+	Expr func;
+	Expr[] args;
 }
 
 final class Function : Expr {

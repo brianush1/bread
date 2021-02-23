@@ -21,12 +21,7 @@ private T expect(T, K)(K sumType) {
 }
 
 struct Value {
-	alias FunctionDelegate = Value delegate(Value[]);
-
-	struct Function {
-		FunctionDelegate value;
-		ir.Expr irNode;
-	}
+	alias Function = Value delegate(Value[]);
 
 	alias Payload = SumType!(
 		typeof(null),
@@ -36,14 +31,9 @@ struct Value {
 		Function,
 	);
 
-	size_t id;
 	Payload payload;
 
-	private static size_t valueCounter;
-
 	this(Args...)(Args args) {
-		valueCounter += 1;
-		id = valueCounter;
 		payload = Payload(args);
 	}
 
@@ -89,11 +79,12 @@ struct Value {
 			(Function value) {
 				switch (op) {
 				case Operation.Call:
-				case Operation.TemplateCall:
-					return value.value(args);
+				// case Operation.TemplateCall:
+					return value(args);
 				default:
 					assert(0);
 				}
+				return value(args);
 			},
 			delegate Value(_) {
 				assert(0);
@@ -124,7 +115,7 @@ enum Operation {
 
 	// misc
 	Call,
-	TemplateCall,
+	// TemplateCall,
 }
 
 abstract class Type {
@@ -152,9 +143,9 @@ abstract class Type {
 		return null;
 	}
 
-	Type typeTemplateCall(Type[] argTypes, Value[] args) {
-		return null;
-	}
+	// Type typeTemplateCall(Type[] argTypes, Value[] args) {
+	// 	return null;
+	// }
 
 	override string toString() const {
 		return "<type>";
@@ -468,6 +459,7 @@ private Nullable!Value evalBody(Stat[] body, Environment env, void delegate() po
 	return Nullable!Value.init;
 }
 
+/+
 final class TemplateType : Type {
 	Type[] paramTypes;
 	string idName;
@@ -516,6 +508,7 @@ final class TemplateType : Type {
 			~ paramTypes.map!(x => x.toString).joiner(", ").to!string ~ ")";
 	}
 }
++/
 
 class AnalysisException : Exception {
 
@@ -549,64 +542,21 @@ void popStack() {
 	stack = stack[0 .. $ - 1];
 }
 
-private ir.Expr[size_t] compiledValues;
-
-ir.Expr compileValue(Value value) {
-	if (value.id !in compiledValues) {
-		value.payload.match!(
-			(typeof(null) x) {
-				compiledValues[value.id] = new ir.Nil;
-			},
-			(bool x) {
-				compiledValues[value.id] = x ? new ir.True : new ir.False;
-			},
-			(int x) {
-				ir.Int node = new ir.Int;
-				node.value = x;
-				compiledValues[value.id] = node;
-			},
-			(Value.Function x) {
-				compiledValues[value.id] = x.irNode;
-			},
-			delegate void(_) {
-				assert(0, typeof(_).stringof);
-			},
-		);
-	}
-	ir.VarAccess result = new ir.VarAccess;
-	result.ns = "val";
-	result.name = value.id.to!string;
-	return result;
-}
+// Environment analyze(Program program) {
+// 	Environment result = new Environment;
+// 	foreach (decl; program.decls) {
+// 		result.staticDecls[decl.name] = decl;
+// 	}
+// 	foreach (decl; program.decls) {
+// 		result.staticVar(decl.name);
+// 	}
+// 	return result;
+// }
 
 ir.Program compile(Program program) {
 	ir.Program result = new ir.Program;
 	Environment env = new Environment;
-	compiledValues.clear;
-	foreach (decl; program.decls) {
-		env.staticDecls[decl.name] = decl;
-	}
-	foreach (decl; program.decls) {
-		Environment.StaticVar var = env.staticVar(decl.name);
-		if (!var.type.isRuntimeType) {
-			continue;
-		}
-		ir.Decl irDecl = new ir.Decl;
-		irDecl.name = decl.name;
-		irDecl.initValue = compileValue(var.value);
-		result.body ~= irDecl;
-	}
-	ir.Decl[] compiledValuesDecls;
-	// FIXME: dependency graph
-	foreach (id, expr; compiledValues) {
-		ir.Decl decl = new ir.Decl;
-		decl.name = id.to!string;
-		decl.initValue = expr;
-		decl.ns = "val";
-		compiledValuesDecls ~= decl;
-	}
-	result.body = compiledValuesDecls ~ result.body;
-	// result.body = cast(ir.Decl[]) compileBody(cast(Stat[]) program.decls, env, {});
+	result.body = cast(ir.Decl[]) compileBody(cast(Stat[]) program.decls, env, {});
 	return result;
 }
 
@@ -671,6 +621,16 @@ private ir.Stat[] compileBody(Stat[] stats, Environment env, void delegate() pos
 		}
 	}
 	return result;
+}
+
+ir.Type toIRType(Type type) {
+	if (type == IntType.instance)
+		return ir.Type.Int;
+	if (type == BoolType.instance)
+		return ir.Type.Bool;
+	if (cast(FunctionType) type)
+		return ir.Type.Function;
+	return ir.Type.Other;
 }
 
 final class Environment {
@@ -841,19 +801,19 @@ final class Environment {
 			}
 			return result;
 		}
-		else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
-			Type templateType = check(expr.templat, staticEval);
-			Type[] argTypes = expr.args.map!(x => check(x, true)).array;
-			Value[] args = expr.args.map!(x => eval(x)).array;
-			Type result = templateType.typeTemplateCall(argTypes, args);
-			if (result is null) {
-				throw new AnalysisException("type '" ~ templateType.toString
-					~ "' cannot be instantiated with arguments of types "
-					~ argTypes.map!(x => "'" ~ x.toString ~ "'").joiner(", ").to!string
-				);
-			}
-			return result;
-		}
+		// else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
+		// 	Type templateType = check(expr.templat, staticEval);
+		// 	Type[] argTypes = expr.args.map!(x => check(x, true)).array;
+		// 	Value[] args = expr.args.map!(x => eval(x)).array;
+		// 	Type result = templateType.typeTemplateCall(argTypes, args);
+		// 	if (result is null) {
+		// 		throw new AnalysisException("type '" ~ templateType.toString
+		// 			~ "' cannot be instantiated with arguments of types "
+		// 			~ argTypes.map!(x => "'" ~ x.toString ~ "'").joiner(", ").to!string
+		// 		);
+		// 	}
+		// 	return result;
+		// }
 		else if (FunctionTypeExpr expr = cast(FunctionTypeExpr) expr_) {
 			if (!staticEval) {
 				throw new AnalysisException("can't create type in non-static evaluation context");
@@ -899,19 +859,16 @@ final class Environment {
 			}
 			return new FunctionType(returnType, paramTypes);
 		}
-		else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
-			if (!staticEval) {
-				assert(0);
-			}
-			Type[] paramTypeTypes = expr.params.map!(x => check(x.type, true)).array;
-			foreach (i; 0 .. paramTypeTypes.length) {
-				if (!TypeType.instance.accepts(paramTypeTypes[i])) {
-					throw new AnalysisException("parameter " ~ i.to!string ~ " type is invalid type");
-				}
-			}
-			Type[] paramTypes = expr.params.map!(x => eval(x.type).payload.expect!Type).array;
-			return new TemplateType(expr.idName, paramTypes, expr, this);
-		}
+		// else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
+		// 	Type[] paramTypeTypes = expr.params.map!(x => check(x.type, true)).array;
+		// 	foreach (i; 0 .. paramTypeTypes.length) {
+		// 		if (!TypeType.instance.accepts(paramTypeTypes[i])) {
+		// 			throw new AnalysisException("parameter " ~ i.to!string ~ " type is invalid type");
+		// 		}
+		// 	}
+		// 	Type[] paramTypes = expr.params.map!(x => eval(x.type).payload.expect!Type).array;
+		// 	return new TemplateType(expr.idName, paramTypes, expr, this);
+		// }
 		else {
 			assert(0, "dunno how to handle " ~ expr_.toString);
 		}
@@ -962,13 +919,13 @@ final class Environment {
 				return Value(false);
 			}
 			else if (expr.value == "print") {
-				return Value(Value.Function(cast(Value.FunctionDelegate)(Value[] args) {
+				return Value(cast(Value.Function)(Value[] args) {
 					import std.stdio : writeln;
 
 					writeln(args[0].payload.expect!int);
 
 					return Value(null);
-				}, new ir.Print));
+				});
 			}
 			else {
 				throw new AnalysisException("unknown built-in '" ~ expr.value ~ "'");
@@ -1002,17 +959,17 @@ final class Environment {
 		else if (CallExpr expr = cast(CallExpr) expr_) {
 			return eval(expr.func).operate(Operation.Call, expr.args.map!(x => eval(x)).array);
 		}
-		else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
-			return eval(expr.templat).operate(Operation.TemplateCall,
-				expr.args.map!(x => eval(x)).array);
-		}
+		// else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
+		// 	return eval(expr.templat).operate(Operation.TemplateCall,
+		// 		expr.args.map!(x => eval(x)).array);
+		// }
 		else if (FunctionTypeExpr expr = cast(FunctionTypeExpr) expr_) {
 			Type returnType = eval(expr.returnType).payload.expect!Type;
 			Type[] paramTypes = expr.paramTypes.map!(x => eval(x).payload.expect!Type).array;
 			return Value(cast(Type) new FunctionType(returnType, paramTypes));
 		}
 		else if (FuncExpr expr = cast(FuncExpr) expr_) {
-			return Value(Value.Function(cast(Value.FunctionDelegate)(Value[] args) {
+			return Value(cast(Value.Function)(Value[] args) {
 				Environment funcInner = new Environment;
 				funcInner.parent = this;
 				return evalFunctionBody(expr.body, funcInner, {
@@ -1020,21 +977,21 @@ final class Environment {
 						funcInner.vars[param.name] = Var(null, Nullable!Value(args[i]));
 					}
 				});
-			}));
+			});
 		}
-		else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
-			return Value(Value.Function(cast(Value.FunctionDelegate)(Value[] args) {
-				Environment funcInner = new Environment;
-				funcInner.parent = this;
-				foreach (i, param; expr.params) {
-					funcInner.staticVars[param.name] = StaticVar(
-						eval(param.type).payload.expect!Type,
-						args[i],
-					);
-				}
-				return evalFunctionBody(expr.body, funcInner, {});
-			}));
-		}
+		// else if (TemplateExpr expr = cast(TemplateExpr) expr_) {
+		// 	return Value(cast(Value.Function)(Value[] args) {
+		// 		Environment funcInner = new Environment;
+		// 		funcInner.parent = this;
+		// 		foreach (i, param; expr.params) {
+		// 			funcInner.staticVars[param.name] = StaticVar(
+		// 				eval(param.type).payload.expect!Type,
+		// 				args[i],
+		// 			);
+		// 		}
+		// 		return evalFunctionBody(expr.body, funcInner, {});
+		// 	});
+		// }
 		else {
 			assert(0, "dunno how to handle " ~ expr_.toString);
 		}
@@ -1083,42 +1040,47 @@ final class Environment {
 		else if (BinaryExpr expr = cast(BinaryExpr) expr_) {
 			auto result = new ir.Binary;
 			result.op = expr.op;
-			result.lhsType = check(expr.lhs, false);
+			result.lhsType = check(expr.lhs, false).toIRType;
 			result.lhs = compile(expr.lhs);
-			result.rhsType = check(expr.rhs, false);
+			result.rhsType = check(expr.rhs, false).toIRType;
 			result.rhs = compile(expr.rhs);
 			return result;
 		}
 		else if (CallExpr expr = cast(CallExpr) expr_) {
 			auto result = new ir.Call;
-			result.funcType = check(expr.func, false);
+			result.funcType = check(expr.func, false).toIRType;
 			result.func = compile(expr.func);
-			result.argTypes = expr.args.map!(arg => check(arg, false)).array;
+			result.argTypes = expr.args.map!(arg => check(arg, false).toIRType).array;
 			result.args = expr.args.map!(arg => compile(arg)).array;
 			return result;
 		}
-		else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
-			Value result = eval(expr.templat).operate(Operation.TemplateCall,
-				expr.args.map!(x => eval(x)).array);
-			// auto result = new ir.Call;
-			// result.funcType = null;
-			// result.func = compile(expr.templat);
-			// foreach (i; 0 .. expr.args.length) {
-			// 	Type type = check(expr.args[i], true);
-			// 	if (type.isRuntimeType) {
-			// 		result.argTypes ~= type;
-			// 		result.args ~= compile(expr.args[i]);
-			// 	}
-			// }
-			debug { import std.stdio : writeln; try { writeln(result); } catch (Exception) {} }
-			return new ir.False;
-		}
+		// else if (TemplateCallExpr expr = cast(TemplateCallExpr) expr_) {
+		// 	Value result = eval(expr.templat).operate(Operation.TemplateCall,
+		// 		expr.args.map!(x => eval(x)).array);
+		// 	// auto result = new ir.Call;
+		// 	// result.funcType = null;
+		// 	// result.func = compile(expr.templat);
+		// 	// foreach (i; 0 .. expr.args.length) {
+		// 	// 	Type type = check(expr.args[i], true);
+		// 	// 	if (type.isRuntimeType) {
+		// 	// 		result.argTypes ~= type;
+		// 	// 		result.args ~= compile(expr.args[i]);
+		// 	// 	}
+		// 	// }
+		// 	debug { import std.stdio : writeln; try { writeln(result); } catch (Exception) {} }
+		// 	return new ir.False;
+		// }
 		else if (FuncExpr expr = cast(FuncExpr) expr_) {
 			auto result = new ir.Function;
 			result.params = expr.params.map!(x => x.name).array;
-			Environment inner = new Environment;
-			inner.parent = this;
-			result.body = compileBody(expr.body, inner, {});
+			Type[] paramTypes = expr.params.map!(x => eval(x.type).payload.expect!Type).array;
+			Environment funcInner = new Environment;
+			funcInner.parent = this;
+			result.body = compileBody(expr.body, funcInner, {
+				foreach (i, param; expr.params) {
+					funcInner.vars[param.name] = Var(paramTypes[i]);
+				}
+			});
 			return result;
 		}
 		else {

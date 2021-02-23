@@ -1,33 +1,58 @@
 module bread.backend.js;
-import bread.analysis;
 import bread.ir;
 import arsd.mvd;
 import std.algorithm;
 import std.conv;
+import std.random;
 
 private immutable(string) preamble = q"(// compiled Bread code
-
-function brstd$binary(op, lhs, rhs) {
-	// TODO: implement this
-	throw 0;
-}
-
-function brstd$call(func, args) {
-	// TODO: implement this
-	throw 0;
-}
 
 function brstd$print(arg) {
 	console.log(arg);
 }
 )";
 
-private immutable(string) postamble = q"(
-br$main();
-)";
+private alias ID = ubyte[4];
 
-private string mangle(string name, string ns = "") {
-	return "br" ~ ns ~ "$" ~ name;
+private static Random rand = Random(0);
+
+private ID nextId() {
+	import std.array : array;
+	import std.range : iota;
+
+	static bool[ID] seen;
+
+	ID result;
+	do {
+		result = iota(0, 4).map!(_ => cast(ubyte) uniform!"[]"(0, 255, rand)).array.to!ID;
+	} while (result in seen);
+
+	seen[result] = true;
+	return result;
+}
+
+private string mangle(ID id) {
+	import std.base64 : Base64Impl, Base64;
+
+	return "br$" ~ Base64Impl!('$', '_', Base64.NoPadding).encode(id).to!string;
+}
+
+private static ID[string] ids;
+
+private ID id(T)(T obj) {
+	string name;
+	static if (is(T == string)) {
+		name = obj;
+	}
+	else {
+		name = obj.name;
+	}
+
+	if (name !in ids) {
+		ids[name] = nextId();
+	}
+
+	return ids[name];
 }
 
 private string indent(string s) {
@@ -55,12 +80,12 @@ string _compile(Program stat) {
 	foreach (v; stat.body) {
 		result ~= compile(v);
 	}
-	result ~= postamble;
+	result ~= "main".id.mangle ~ "();";
 	return result.joiner("\n").to!string;
 }
 
 string _compile(Decl stat) {
-	return "let " ~ stat.name.mangle(stat.ns) ~ " = " ~ stat.initValue.compile ~ ";";
+	return "let " ~ stat.id.mangle ~ " = " ~ stat.initValue.compile ~ ";";
 }
 
 string _compile(Return expr) {
@@ -81,7 +106,7 @@ string _compile(Int expr) {
 }
 
 string _compile(VarAccess expr) {
-	return expr.name.mangle(expr.ns);
+	return expr.id.mangle;
 }
 
 string _compile(True expr) {
@@ -103,14 +128,14 @@ string _compile(Nil expr) {
 string _compile(Binary expr) {
 	string lhs = compile(expr.lhs);
 	string rhs = compile(expr.rhs);
-	if (expr.lhsType is IntType.instance && expr.rhsType is IntType.instance) {
+	if (expr.lhsType == Type.Int && expr.rhsType == Type.Int) {
 		switch (expr.op) {
 			// arithmetic
 			case BinaryOp.Add: return "(" ~ lhs ~ " + " ~ rhs ~ " | 0)";
 			case BinaryOp.Sub: return "(" ~ lhs ~ " - " ~ rhs ~ " | 0)";
 			case BinaryOp.Mul: return "Math.imul(" ~ lhs ~ ", " ~ rhs ~ ")";
 			case BinaryOp.Div: return "(" ~ lhs ~ " / " ~ rhs ~ " | 0)";
-			case BinaryOp.Mod: return "(" ~ lhs ~ " % " ~ rhs ~ ")"; // TODO: make sure this doesn't need "| 0"
+			case BinaryOp.Mod: return "(" ~ lhs ~ " % " ~ rhs ~ " | 0)";
 
 			// relational
 			case BinaryOp.Eq: return "(" ~ lhs ~ " === " ~ rhs ~ ")";
@@ -124,22 +149,22 @@ string _compile(Binary expr) {
 		}
 	}
 	else {
-		return "brstd$binary(" ~ (cast(int) expr.op).to!string ~ ", " ~ lhs ~ ", " ~ rhs ~ ")";
+		assert(0);
 	}
 }
 
 string _compile(Call expr) {
 	string func = compile(expr.func);
 	string args = expr.args.map!(x => compile(x)).joiner(", ").to!string;
-	if (cast(FunctionType) expr.funcType) {
+	if (expr.funcType == Type.Function) {
 		return func ~ "(" ~ args ~ ")";
 	}
 	else {
-		return "brstd$call(" ~ func ~ ", [" ~ args ~ "])";
+		assert(0);
 	}
 }
 
 string _compile(Function expr) {
-	return "function(" ~ expr.params.map!mangle.joiner(", ").to!string ~ ") "
+	return "function(" ~ expr.params.map!id.map!mangle.joiner(", ").to!string ~ ") "
 		~ compileBlock(expr.body);
 }

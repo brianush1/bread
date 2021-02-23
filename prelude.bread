@@ -1,4 +1,0 @@
-// this file is implicitly imported in all Bread programs
-
-type int = __builtin_value__ "int-type";
-type void = __builtin_value__ "void-type";
