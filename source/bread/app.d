@@ -2,7 +2,8 @@ import bread.source;
 import bread.analysis;
 import bread.parser;
 import bread.ast;
-import bread.backend.js;
+import js = bread.backend.js;
+import lua = bread.backend.lua;
 import std;
 
 void main() {
@@ -11,8 +12,8 @@ void main() {
 	try {
 		Program prog = parser.readProgram;
 		auto ir = compile(prog);
-		string compiled = compile(ir);
-		File file = File("test.toast.js", "w");
+		string compiled = lua.compile(ir);
+		File file = File("test.toast.lua", "w");
 		file.write(compiled);
 		file.close();
 	}

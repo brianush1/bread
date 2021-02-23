@@ -18,27 +18,7 @@ int fib(int x) {
 
 void main() {
 	print(fib(17));
-	foot();
-}
-
-void foot() {
-	print(5);
-	return print(3);
-}
-
-//template prant!(type T) {
-	return void(T value) {
-		__builtin_value__ "print"(value);
-	};
-}
-
-//void xa = prant!int(fib(17)); // TODO: check for variable shadows
-
-//int fib(int x) {
-	if (x <= 1) {
-		return x;
-	}
-	else {
-		return fib(x - 1) + fib(x - 2);
-	}
+	print(2147483647 + 3);
+	print(56);
+	print(0 - 2147483646 - 3);
 }
