@@ -23,6 +23,11 @@ final class Decl : Stat {
 	Expr initValue;
 }
 
+final class Native : Stat {
+	bool[] isVar;
+	string[] values;
+}
+
 final class Return : Stat {
 	Expr value;
 }

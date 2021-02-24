@@ -7,13 +7,13 @@ import lua = bread.backend.lua;
 import std;
 
 void main() {
-	Source source = new Source("test.bread", cast(string) read("test.bread"));
+	Source source = new Source("init.bread", cast(string) read("init.bread"));
 	Parser parser = new Parser(source);
 	try {
 		Program prog = parser.readProgram;
 		auto ir = compile(prog);
-		string compiled = lua.compile(ir);
-		File file = File("test.toast.lua", "w");
+		string compiled = js.compile(ir);
+		File file = File("init.toast.js", "w");
 		file.write(compiled);
 		file.close();
 	}

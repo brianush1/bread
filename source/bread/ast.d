@@ -91,6 +91,13 @@ final class ExprStat : Stat {
 	mixin prettyPrinter!(typeof(this));
 }
 
+final class Native : Stat {
+	bool[] isVar;
+	string[] values;
+
+	mixin prettyPrinter!(typeof(this));
+}
+
 final class Return : Stat {
 	Expr value;
 

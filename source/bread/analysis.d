@@ -375,6 +375,7 @@ private Type[] checkBody(Stat[] body, Environment env,
 				}
 			}
 		}
+		else if (Native native = cast(Native) stat) {}
 		else if (Return returnStat = cast(Return) stat) {
 			possibleReturns ~= env.check(returnStat.value, isTemplate);
 		}
@@ -434,6 +435,9 @@ private Nullable!Value evalBody(Stat[] body, Environment env, void delegate() po
 					Nullable!Value(env.eval(decl.initValue)),
 				);
 			}
+		}
+		else if (Native nativeStat = cast(Native) stat) {
+			assert(0);
 		}
 		else if (Return returnStat = cast(Return) stat) {
 			return Nullable!Value(env.eval(returnStat.value));
@@ -595,6 +599,12 @@ private ir.Stat[] compileBody(Stat[] stats, Environment env, void delegate() pos
 				node.initValue = env.compile(decl.initValue);
 				result ~= node;
 			}
+		}
+		else if (Native nativeStat = cast(Native) stat) {
+			ir.Native node = new ir.Native;
+			node.values = nativeStat.values;
+			node.isVar = nativeStat.isVar;
+			result ~= node;
 		}
 		else if (Return returnStat = cast(Return) stat) {
 			ir.Return node = new ir.Return;

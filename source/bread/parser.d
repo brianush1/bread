@@ -37,7 +37,7 @@ immutable(string[]) KEYWORDS = [
 	"type", "if", "else", "do", "return", "static",
 	"template",
 	"const", "immutable", "function", "struct",
-	"new", "import", "__builtin_value__",
+	"new", "import", "__builtin_value__", "__native__",
 	"pragma",
 ];
 
@@ -784,6 +784,31 @@ final class Parser {
 				result.value = value;
 				result.span = value.span = merge(start, semi);
 			}
+			return result;
+		}
+		else if (lexer.tryNext!(Token.Keyword)(Keyword!"__native__")) {
+			Native result = new Native;
+			lexer.expect!(Token.Symbol)(Symbol!"(");
+			while (lexer.until!(Token.Symbol)(Symbol!")")) {
+				if (lexer.isNext!(Token.String)) {
+					result.isVar ~= false;
+					result.values ~= lexer.expect!(Token.String).value;
+				}
+				else if (lexer.isNext!(Token.Identifier)) {
+					result.isVar ~= true;
+					result.values ~= lexer.expect!(Token.Identifier).name;
+				}
+				else {
+					throw new ParsingException(
+						Diagnostic.Kind.Error,
+						Nullable!Span(lexer.front.span),
+						"invalid syntax",
+						"",
+					);
+				}
+			}
+			lexer.expect!(Token.Symbol)(Symbol!")");
+			result.span = merge(start, semi);
 			return result;
 		}
 		else if (lexer.tryNext!(Token.Keyword)(Keyword!"if")) {

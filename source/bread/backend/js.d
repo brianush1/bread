@@ -88,17 +88,31 @@ string _compile(Decl stat) {
 	return "let " ~ stat.id.mangle ~ " = " ~ stat.initValue.compile ~ ";";
 }
 
-string _compile(Return expr) {
-	return "return " ~ expr.value.compile ~ ";";
+string _compile(Native stat) {
+	string result;
+	foreach (i, v; stat.values) {
+		if (stat.isVar[i]) {
+			result ~= v.id.mangle;
+		}
+		else {
+			result ~= v;
+		}
+	}
+	result ~= ";";
+	return result;
 }
 
-string _compile(If expr) {
-	return "if (" ~ expr.cond.compile ~ ") " ~ compileBlock(expr.body) ~ " else "
-		~ compileBlock(expr.elseBody);
+string _compile(Return stat) {
+	return "return " ~ stat.value.compile ~ ";";
 }
 
-string _compile(ExprStat expr) {
-	return compile(expr.value) ~ ";";
+string _compile(If stat) {
+	return "if (" ~ stat.cond.compile ~ ") " ~ compileBlock(stat.body) ~ " else "
+		~ compileBlock(stat.elseBody);
+}
+
+string _compile(ExprStat stat) {
+	return compile(stat.value) ~ ";";
 }
 
 string _compile(Int expr) {
